@@ -1,0 +1,226 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  <title>弹窗管理系统 › 个人技术博客</title>
+  <meta name="author" content="Fr0zen">
+  
+  <meta name="description" content="弹窗管理系统引入在操作系统中，有一种著名的调度算法——多级反馈队列（Multi-level Feedback Queue，MLFQ）。该算法将任务按照优先级划分为多个队列，并通过不断地调整任务所在队列来实现动态调度。
+在该算法中，新到来的任务会首先进入最高优先级队列。如果该任务执行完毕后，仍有其他任">
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+
+  <meta property="og:title" content="弹窗管理系统"/>
+  <meta property="og:site_name" content="个人技术博客"/>
+
+  
+    <meta property="og:image" content=""/>
+  
+
+  <link href="/favicon.png" rel="icon">
+  <link rel="alternate" href="/atom.xml" title="个人技术博客" type="application/atom+xml">
+  <link rel="stylesheet" href="/css/style.css" media="screen" type="text/css">
+  <!--[if lt IE 9]><script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script><![endif]-->
+  
+
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+
+<body>
+  <header id="header"><div class="meta inner">
+  <h1><a href="/">个人技术博客</a></h1>
+  <h2><a href="/">Fr0zen</a></h2>
+  <nav id="main-nav">
+    <ul>
+      
+      <li><a href="/archives">Archives</a></li>
+      
+    </ul>
+    <div class="clearfix"></div>
+  </nav>
+</div>
+<div class="clearfix"></div>
+</header>
+  <div id="content" class="inner">
+    <div id="main-col" class="alignleft"><div id="wrapper"><article class="post">
+  <div class="post-content">
+    <header>
+      
+  
+    <h1 class="title">弹窗管理系统</h1>
+  
+
+      
+        <time datetime="2023-08-24T16:00:00.000Z">2023-08-25</time>
+      
+    </header>
+    <div class="entry">
+      
+        <h1 id="弹窗管理系统"><a href="#弹窗管理系统" class="headerlink" title="弹窗管理系统"></a>弹窗管理系统</h1><h3 id="引入"><a href="#引入" class="headerlink" title="引入"></a>引入</h3><p>在操作系统中，有一种著名的调度算法——多级反馈队列（Multi-level Feedback Queue，MLFQ）。该算法将任务按照优先级划分为多个队列，并通过不断地调整任务所在队列来实现动态调度。</p>
+<p>在该算法中，新到来的任务会首先进入最高优先级队列。如果该任务执行完毕后，仍有其他任务等待执行，则该任务会被放入第二高优先级队列中等待调度。依此类推，每一个队列都拥有一个固定的时间片，当一个任务在当前队列的时间片耗尽后，它会被移动到下一个优先级队列中等待调度。</p>
+<p>如果一个任务在低优先级队列中等待时间过长，系统将会将其移回到高优先级队列中重新调度。另外，该算法还可以设置不同队列之间的优先级差别、任务进入队列的规则等参数，以便更好地控制任务的执行顺序和时间分配。</p>
+<style>.idjurrwmhoep{zoom: 33%;}</style><img src="/2023/08/25/%E5%BC%B9%E7%AA%97%E7%AE%A1%E7%90%86%E7%B3%BB%E7%BB%9F/MLFQ.jpg" class="idjurrwmhoep" alt="MLFQ">
+
+<p>引入多级反馈队列，是因为后面即将提到的“多级队列”可以视为其简化版本，包含了多级调度的思想。</p>
+<h3 id="介绍"><a href="#介绍" class="headerlink" title="介绍"></a>介绍</h3><p>本文提到的弹窗管理系统是一种用于管理游戏或应用程序中弹窗面板的系统。该系统可以帮助开发者更好地管理和控制弹窗面板的展示和行为，降低弹窗类需求的开发成本。</p>
+<p>具体而言，弹窗管理系统包括以下功能：</p>
+<ul>
+<li><p>弹窗的创建、管理和删除；</p>
+</li>
+<li><p>根据游戏中的特定条件进行特定弹窗的投放；</p>
+</li>
+<li><p>通过<a href="#%E5%A4%9A%E7%BA%A7%E9%98%9F%E5%88%97">多级队列</a>的方式调度弹窗的优先级；</p>
+</li>
+</ul>
+<h3 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h3><p>目前的PJC5项目，在处理弹窗类需求时，普遍采取在业务内作单独处理的方式。但随着项目的迭代开发，弹窗类需求逐渐增多，如：登录弹首充、满足特定条件弹礼包、业务开放弹提示等。随之而来的问题是，弹窗之间出现了冲突，在不做特殊处理的情况下，会出现多个弹窗同时弹出的现象。</p>
+<p>在弹窗需求数量不多时，在业务内部处理弹窗的做法并没有问题，但随着弹窗数量的增多，冲突的出现使得对弹窗的管理变得更加困难，为了处理冲突而做的特殊处理也会几何级增长。为了解决此问题，引入弹窗管理系统专门处理弹窗类需求。</p>
+<h3 id="作用"><a href="#作用" class="headerlink" title="作用"></a>作用</h3><ol>
+<li><strong>降低了因弹窗冲突处理导致的业务之间的耦合度</strong>：弹窗系统可以通过内部调度管理，处理不同业务弹窗之间的冲突、优先级等问题。因此，业务对应的弹窗仅需要与弹窗系统进行交互，而不需要考虑其他业务弹窗，降低了业务弹窗之间的耦合度。</li>
+<li><strong>灵活控制弹窗，弹窗是否弹出由系统和业务共同控制</strong>：系统负责调度层面的控制，具体弹窗是否弹出仍由具体业务负责。换句话说，弹窗系统负责弹窗的粗粒度控制，业务负责细粒度控制。</li>
+<li><strong>具有良好的可拓展性，支持在任意条件任意场景中投放弹窗</strong>：弹窗系统采用触发器控制弹窗的投放时机，开发者可以根据需求自行拓展自定义的触发器，以控制弹窗投放。</li>
+<li><strong>可以作为通用模块，跨项目使用</strong></li>
+</ol>
+<h3 id="实现原理"><a href="#实现原理" class="headerlink" title="实现原理"></a>实现原理</h3><p>弹窗系统从结构上可以分为两部分：触发器和多级队列。触发器（Trigger）用于确定弹窗的弹出时机，根据实际使用情况，派生出不同的触发器（TriggerA、TriggerB）；多级队列用于调度和管理弹窗，每个队列管理者（PopUpListController）都负责多个弹窗（PopUpElement），根据实际使用情况，派生出多种不同的弹窗，常见的有面板类弹窗（PopUpPanelElement）、自定义弹窗（PopUpDiyElement）。</p>
+<img src="/2023/08/25/%E5%BC%B9%E7%AA%97%E7%AE%A1%E7%90%86%E7%B3%BB%E7%BB%9F/%E7%B1%BB%E5%9B%BE.png" class="" title="类图">
+
+<h4 id="触发器"><a href="#触发器" class="headerlink" title="触发器"></a>触发器</h4><p>触发器模式（Trigger Pattern）是一种常见的编程模式，用于处理异步事件。在该模式中，事件分为两个部分：触发器和处理程序。当触发器满足一定条件时，就会触发相应的处理程序，进行后续操作。</p>
+<p>触发器模式可以视为观察者模式的一种优化版本。相比于普通的观察者模式，触发器模式能够将事件发送者和事件接收者解耦合，从而在程序开发中减少各组件之间的依赖关系，使得代码更加模块化，可维护性和可扩展性更强。</p>
+<p>弹窗系统使用触发器模式来确定弹窗的弹出时机。系统通过触发器来检测游戏状态，当触发器检测到满足特定条件时，就会触发相应的弹窗投放，进行弹窗的展示。</p>
+<p>例如：实现游戏中常见的升级弹窗，弹窗系统会设置一个触发器，每当玩家升级后，会通知弹窗系统，弹出升级成功的弹窗。</p>
+<h4 id="多级队列"><a href="#多级队列" class="headerlink" title="多级队列"></a>多级队列</h4><img src="/2023/08/25/%E5%BC%B9%E7%AA%97%E7%AE%A1%E7%90%86%E7%B3%BB%E7%BB%9F/image-20230525162258488.png" class="" title="image-20230525162258488">
+
+<p>多级队列是一种用于弹窗调度的数据结构，包含两种优先级队列：一级队列只有一个，包含多个二级队列；每个二级队列具有优先级，包含多个弹窗，同时对应一个触发器；每个弹窗也有对应的优先级。当一个弹窗关闭后，会根据多级队列，弹出下一个弹窗。</p>
+<h5 id="注册弹窗流程"><a href="#注册弹窗流程" class="headerlink" title="注册弹窗流程"></a>注册弹窗流程</h5><img src="/2023/08/25/%E5%BC%B9%E7%AA%97%E7%AE%A1%E7%90%86%E7%B3%BB%E7%BB%9F/image-20230525162216241.png" class="" title="image-20230525162216241">
+
+<p>首先，弹窗系统根据弹窗对应的触发类型（即触发器类型），将弹窗push进入对应的二级队列；然后，二级队列再根据弹窗的优先级进行排序；最后，二级队列将等待对应触发器的触发。</p>
+<h5 id="触发器触发流程"><a href="#触发器触发流程" class="headerlink" title="触发器触发流程"></a>触发器触发流程</h5><img src="/2023/08/25/%E5%BC%B9%E7%AA%97%E7%AE%A1%E7%90%86%E7%B3%BB%E7%BB%9F/image-20230525162230400.png" class="" title="image-20230525162230400">
+
+<p>二级队列的触发器触发后，弹窗系统会将二级队列作为一个元素加入一级队列中，并进行排序。每当一级队列中有元素时，弹窗系统都会按照优先级，逐个弹出弹窗。</p>
+<p>当一个二级队列中的弹窗都完成弹出后，会被暂时移出一级队列，直到下一次触发器触发且二级队列中有弹窗才会重新进入一级队列。</p>
+<h4 id="例子"><a href="#例子" class="headerlink" title="例子"></a>例子</h4><p>玩家升到五十级，【玩家升级触发器】满足条件，【二级队列a】被加入【一级队列】。同时后端判断玩家满足条件，推送了一个礼包信息，【礼包触发器】满足条件，【二级队列b】也被加入【一级队列】。此时按照优先级，先弹出【二级队列a】中的【升级成功弹窗】，等玩家关闭【升级成功弹窗】后，再弹出【礼包弹窗】。</p>
+<img src="/2023/08/25/%E5%BC%B9%E7%AA%97%E7%AE%A1%E7%90%86%E7%B3%BB%E7%BB%9F/image-20230525163458872.png" class="" title="image-20230525163458872">
+
+<h3 id="业务弹窗注册方式"><a href="#业务弹窗注册方式" class="headerlink" title="业务弹窗注册方式"></a>业务弹窗注册方式</h3><p>向弹窗系统注册一个弹窗，业务需要明确弹窗的注册时机、触发类型以及弹出权限。</p>
+<ul>
+<li><p><strong>注册时机</strong></p>
+<p>弹窗的注册时机应该在预期的弹出时机之前，换句话说，在触发器条件满足之前，弹窗应该已经完成注册。</p>
+</li>
+<li><p><strong>触发类型</strong></p>
+<p>业务应该明确弹窗的触发类型，即弹窗应该由哪个触发器触发。</p>
+</li>
+<li><p><strong>弹出权限</strong></p>
+<p>业务需要控制弹窗的实际弹出权限，例如：当业务没开放时不弹出、每天只弹出一次等，需要具体业务根据实际情况做判断。</p>
+</li>
+</ul>
+<p>综上所述，<strong>触发类型</strong>和<strong>弹出权限</strong>共同控制弹窗是否弹出，即两者都满足时弹窗才能弹出。区别在于触发类型是粗粒度控制（所有业务都由多级队列统一调度），而弹出权限是细粒度控制（不同业务根据具体条件做限制）。</p>
+<h3 id="拓展"><a href="#拓展" class="headerlink" title="拓展"></a>拓展</h3><p>本系统仅实现了基础框架，根据项目的区别、需求的变化，还有很多迭代优化空间。在此列举以下迭代优化的方向和思路：</p>
+<ol>
+<li><p>加入生命周期回调</p>
+<p>可以在弹窗弹出前、弹窗弹出后、二级队列完成后等时机加上生命周期回调，以满足更多需求。</p>
+</li>
+<li><p>调度方式优化</p>
+<p>多级队列的调度方式可能存在性能瓶颈，根据实际项目情况，可以优化其实现方式，或者采用更高效的调度方式。</p>
+</li>
+<li><p>配置驱动</p>
+<p>如果项目中业务弹窗的权限控制具有明显的通用规则，可以考虑用配置驱动的方式，将弹窗权限控制集成到弹窗系统中。</p>
+</li>
+<li><p>错误处理</p>
+<p>弹窗系统应该考虑到错误分支的处理。因为系统本身与多个业务耦合，影响范围比较大，如果某个弹窗在某个环节报错了，可能会导致后续弹窗无法弹出或游戏卡死。一种解决方案是，在强流程上使用try-catch捕获报错，并强制关闭报错的弹窗。</p>
+</li>
+</ol>
+
+      
+    </div>
+      
+      <footer>
+        
+        
+        
+  <div class="addthis addthis_toolbox addthis_default_style">
+    
+      <a class="addthis_button_facebook_like" fb:like:layout="button_count"></a>
+    
+    
+      <a class="addthis_button_tweet"></a>
+    
+    
+      <a class="addthis_button_google_plusone" g:plusone:size="medium"></a>
+    
+    
+      <a class="addthis_button_pinterest_pinit" pi:pinit:layout="horizontal"></a>
+    
+    <a class="addthis_counter addthis_pill_style"></a>
+  </div>
+  <script type="text/javascript" src="//s7.addthis.com/js/300/addthis_widget.js"></script>
+
+      
+      <div class="clearfix"></div>
+      </footer>
+  </div>
+</article>
+
+
+<section id="comment">
+  
+</section>
+
+
+</div></div>
+    <aside id="sidebar" class="alignright">
+  <div class="search">
+  <form action="//google.com/search" method="get" accept-charset="utf-8">
+    <input type="search" name="q" results="0" placeholder="搜索">
+    <input type="hidden" name="q" value="site:fr0zen-sh1t.github.io">
+  </form>
+</div>
+
+  
+<div class="widget tag">
+  <h3 class="title">最新文章</h3>
+  <ul class="entry">
+    
+      <li>
+        <a href="/2024/12/15/大型项目预览卡顿解决方案/">大型项目预览卡顿解决方案</a>
+      </li>
+    
+      <li>
+        <a href="/2024/08/08/Label合图/">Label合图</a>
+      </li>
+    
+      <li>
+        <a href="/2024/06/06/自定义渲染流程/">自定义渲染流程</a>
+      </li>
+    
+      <li>
+        <a href="/2024/03/04/psd转预制体/">psd转预制体</a>
+      </li>
+    
+      <li>
+        <a href="/2023/08/25/弹窗管理系统/">弹窗管理系统</a>
+      </li>
+    
+  </ul>
+</div>
+
+
+  
+
+  
+</aside>
+    <div class="clearfix"></div>
+  </div>
+  <footer id="footer" class="inner"><div class="alignleft">
+  
+  &copy; 2025 Fr0zen
+  
+</div>
+<div class="clearfix"></div></footer>
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
+
+
+
+</body>
+</html>
+

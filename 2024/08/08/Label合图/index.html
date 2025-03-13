@@ -1,0 +1,176 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  <title>Label合图 › 个人技术博客</title>
+  <meta name="author" content="Fr0zen">
+  
+  <meta name="description" content="前言众所周知，cocos的label性能很烂。特别是ttf字体的label，在生成字符串位图时耗时太高，甚至于加载prefab的主要耗时都在label上。两种缓存模式各有坑，BITMAP有bug会重复两个位图，char用满了图集不会回收，而且有描边时显示很怪。所以做了label合图优化。社区大佬提供">
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+
+  <meta property="og:title" content="Label合图"/>
+  <meta property="og:site_name" content="个人技术博客"/>
+
+  
+    <meta property="og:image" content=""/>
+  
+
+  <link href="/favicon.png" rel="icon">
+  <link rel="alternate" href="/atom.xml" title="个人技术博客" type="application/atom+xml">
+  <link rel="stylesheet" href="/css/style.css" media="screen" type="text/css">
+  <!--[if lt IE 9]><script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script><![endif]-->
+  
+
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+
+<body>
+  <header id="header"><div class="meta inner">
+  <h1><a href="/">个人技术博客</a></h1>
+  <h2><a href="/">Fr0zen</a></h2>
+  <nav id="main-nav">
+    <ul>
+      
+      <li><a href="/archives">Archives</a></li>
+      
+    </ul>
+    <div class="clearfix"></div>
+  </nav>
+</div>
+<div class="clearfix"></div>
+</header>
+  <div id="content" class="inner">
+    <div id="main-col" class="alignleft"><div id="wrapper"><article class="post">
+  <div class="post-content">
+    <header>
+      
+  
+    <h1 class="title">Label合图</h1>
+  
+
+      
+        <time datetime="2024-08-07T16:00:00.000Z">2024-08-08</time>
+      
+    </header>
+    <div class="entry">
+      
+        <h1 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h1><p>众所周知，cocos的label性能很烂。特别是ttf字体的label，在生成字符串位图时耗时太高，甚至于加载prefab的主要耗时都在label上。两种缓存模式各有坑，BITMAP有bug会重复两个位图，char用满了图集不会回收，而且有描边时显示很怪。<br>所以做了label合图优化。社区大佬提供的方案是修改char模式，合理重复利用图集空间，详情见<a target="_blank" rel="noopener" href="https://forum.cocos.org/t/label-2-char/97766">乐府的文章</a>。但是char模式对于描边、阴影显示效果不好，于是改进方案：直接将位图打进合图。</p>
+<h2 id="技术方案"><a href="#技术方案" class="headerlink" title="技术方案"></a>技术方案</h2><img src="/2024/08/08/Label%E5%90%88%E5%9B%BE/Label%E5%90%88%E5%9B%BE%E6%B5%81%E7%A8%8B%E5%9B%BE.png" class="" title="Label合图流程图">
+
+<h3 id="核心逻辑"><a href="#核心逻辑" class="headerlink" title="核心逻辑"></a>核心逻辑</h3><p>仿照<code>cc.dynamicAtlasManager</code>，自定义缓存图集<code>cacheAtlasManager</code>，图集使用MaxRects算法管理空间。</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//缓存图集cacheAtlas</span></span><br><span class="line"><span class="keyword">function</span> <span class="title function_">Atlas</span>(<span class="params">width, height, manager</span>) &#123;</span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">manager</span> = manager;</span><br><span class="line">    <span class="keyword">let</span> texture = <span class="keyword">new</span> <span class="title class_">RenderTexture</span>();</span><br><span class="line">    texture.<span class="title function_">initWithSize</span>(width, height);</span><br><span class="line">    texture.<span class="title function_">update</span>();</span><br><span class="line"></span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">_texture</span> = texture;</span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">maxSize</span> = width * height * <span class="number">4</span>;</span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">maxAutoReleaseSize</span> = <span class="variable language_">this</span>.<span class="property">maxSize</span> * <span class="number">0.85</span>; <span class="comment">// 图片排列并不规则，剩余空间会很零碎，所以这里尽量低些</span></span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">maxHoldSize</span> = <span class="variable language_">this</span>.<span class="property">maxSize</span> * <span class="number">0.5</span>;</span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">releaseSizeOnce</span> = <span class="variable language_">this</span>.<span class="property">maxSize</span> * <span class="number">0.3</span>;</span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">curSize</span> = <span class="number">0</span>;</span><br><span class="line">   </span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">_x</span> = space;</span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">_y</span> = space;</span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">_nexty</span> = space;</span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">_width</span> = width;</span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">_height</span> = height;</span><br><span class="line">	<span class="comment">//使用MaxRects算法管理空间</span></span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">_maxRects</span> = <span class="keyword">new</span> <span class="title class_">MaxRects</span>(<span class="variable language_">this</span>.<span class="property">_width</span>, <span class="variable language_">this</span>.<span class="property">_height</span>, space, space);</span><br><span class="line"></span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">_innerSpriteFrames</span> = [];</span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">_cacheInfoList</span> = [];</span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">_cacheInfoMap</span> = &#123;&#125;;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>ttf更新逻辑修改，拓展<code>_updateRenderData</code>，判断缓存图集</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//ttf.js</span></span><br><span class="line"><span class="comment">//修改updateRenderData</span></span><br><span class="line"><span class="title function_">_updateRenderDataByCacheAtlas</span>(<span class="params">comp</span>) &#123;</span><br><span class="line">	<span class="comment">//缓存UId</span></span><br><span class="line">    <span class="keyword">let</span> newCacheUId = <span class="string">`c: <span class="subst">$&#123;_string&#125;</span>_<span class="subst">$&#123;_fontSize&#125;</span>_<span class="subst">$&#123;_underlineThickness&#125;</span>_<span class="subst">$&#123;_overflow&#125;</span>_<span class="subst">$&#123;_canvasSize.width&#125;</span>_<span class="subst">$&#123;_canvasSize.height</span></span></span><br><span class="line"><span class="subst"><span class="string">    &#125;</span>_<span class="subst">$&#123;_nodeContentSize.width&#125;</span>_<span class="subst">$&#123;_nodeContentSize.height&#125;</span>_<span class="subst">$&#123;_lineHeight&#125;</span>_<span class="subst">$&#123;_hAlign&#125;</span>_<span class="subst">$&#123;_vAlign&#125;</span>_<span class="subst">$&#123;_color._val&#125;</span>_<span class="subst">$&#123;_enableBold</span></span></span><br><span class="line"><span class="subst"><span class="string">    &#125;</span>_<span class="subst">$&#123;_enableItalic&#125;</span>_<span class="subst">$&#123;_enableUnderline&#125;</span>_<span class="subst">$&#123;_fontFamily&#125;</span>_<span class="subst">$&#123;_premultiply&#125;</span>_<span class="subst">$&#123;_outlineComp &amp;&amp; _outlineColor._val || <span class="number">0</span></span></span></span><br><span class="line"><span class="subst"><span class="string">    &#125;</span>_<span class="subst">$&#123;_shadowComp &amp;&amp; _shadowColor._val || <span class="number">0</span>&#125;</span>_<span class="subst">$&#123;comp.cacheMode&#125;</span>`</span>;</span><br><span class="line">    <span class="keyword">let</span> cachedInfo = <span class="variable language_">this</span>.<span class="title function_">getCacheInfoByUId</span>(newCacheUId);</span><br><span class="line">    <span class="keyword">if</span> (cachedInfo) &#123;</span><br><span class="line">        _texture.<span class="property">width</span> = cachedInfo.<span class="property">width</span>;</span><br><span class="line">        _texture.<span class="property">height</span> = cachedInfo.<span class="property">height</span>;</span><br><span class="line">        <span class="variable language_">this</span>.<span class="title function_">_calCacheAtlas</span>(comp, cachedInfo);</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        <span class="variable language_">this</span>.<span class="title function_">_updateLabelDimensions</span>();</span><br><span class="line">        <span class="variable language_">this</span>.<span class="title function_">_updateTexture</span>(comp);</span><br><span class="line">        <span class="variable language_">this</span>.<span class="title function_">_calCacheAtlas</span>(comp, <span class="literal">undefined</span>, newCacheUId);</span><br><span class="line">        cachedInfo = <span class="variable language_">this</span>.<span class="title function_">getCacheInfoByUId</span>(newCacheUId);</span><br><span class="line">        <span class="keyword">if</span> (!cachedInfo) &#123;</span><br><span class="line">            _texture.<span class="title function_">handleLoadedTexture</span>();</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//计算缓存图集</span></span><br><span class="line"><span class="title function_">_calCacheAtlas</span> (comp, cachedInfo, uid) &#123;</span><br><span class="line">    <span class="keyword">if</span>(!<span class="variable language_">this</span>.<span class="title function_">isCacheAtlasEnabled</span>()) <span class="keyword">return</span>;</span><br><span class="line">    <span class="keyword">let</span> frame = comp.<span class="property">_frame</span>;</span><br><span class="line">    <span class="title function_">deleteFromCacheAtlas</span>(comp, frame);</span><br><span class="line">    <span class="keyword">if</span> (cachedInfo) &#123;</span><br><span class="line">        frame.<span class="title function_">setRect</span>(cc.<span class="title function_">rect</span>(<span class="number">0</span>, <span class="number">0</span>, cachedInfo.<span class="property">width</span>, cachedInfo.<span class="property">height</span>));</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        frame.<span class="title function_">setRect</span>(cc.<span class="title function_">rect</span>(<span class="number">0</span>, <span class="number">0</span>, _canvas.<span class="property">width</span>, _canvas.<span class="property">height</span>));</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span>(uid)&#123;</span><br><span class="line">        frame.<span class="property">_texture</span>.<span class="property">_cacheUId</span> = uid;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="variable language_">this</span>.<span class="title function_">packToCacheAtlas</span>(comp, frame);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="MaxRects空间算法"><a href="#MaxRects空间算法" class="headerlink" title="MaxRects空间算法"></a>MaxRects空间算法</h3><p>使用MaxRects算法管理空间，大致逻辑如下：</p>
+<ul>
+<li>维护“空闲矩形列表”。初始时，整张图片作为一个空闲矩形</li>
+<li>若要放入一张图片，则在“空闲矩形列表”中寻找，找到一个合适的矩形，并从“空闲矩形列表”移除</li>
+<li>把找到的矩形拆分为一个或多个矩形，其中一个正好容纳图片。剩余的矩形加入“空闲矩形列表”之中</li>
+</ul>
+<h4 id="取用逻辑"><a href="#取用逻辑" class="headerlink" title="取用逻辑"></a>取用逻辑</h4><figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="title function_">placeRect</span>(<span class="params">rect</span>) &#123;</span><br><span class="line">	<span class="comment">//查询合适的矩形</span></span><br><span class="line">    <span class="keyword">let</span> node = <span class="variable language_">this</span>.<span class="title function_">findNode</span>(rect.<span class="property">width</span> + <span class="variable language_">this</span>.<span class="property">padding</span>, rect.<span class="property">height</span> + <span class="variable language_">this</span>.<span class="property">padding</span>)</span><br><span class="line">    <span class="keyword">if</span> (node) &#123;</span><br><span class="line">	    <span class="comment">//更新其他自由矩形</span></span><br><span class="line">        <span class="variable language_">this</span>.<span class="title function_">spliceAllFreeRect</span>(node)</span><br><span class="line">        <span class="variable language_">this</span>.<span class="title function_">pruneFreeList</span>()</span><br><span class="line">        rect.<span class="property">x</span> = node.<span class="property">x</span>;</span><br><span class="line">        rect.<span class="property">y</span> = node.<span class="property">y</span>;</span><br><span class="line">        <span class="comment">//记录缓存</span></span><br><span class="line">        <span class="variable language_">this</span>.<span class="title function_">recycleRect</span>(node);</span><br><span class="line">        <span class="keyword">return</span> rect;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">undefined</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="回收逻辑"><a href="#回收逻辑" class="headerlink" title="回收逻辑"></a>回收逻辑</h4><figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="title function_">batchRelease</span>(<span class="params">rectList, rectMap</span>) &#123;</span><br><span class="line">    <span class="keyword">if</span> (rectList.<span class="property">length</span> == <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (!rectMap) &#123;</span><br><span class="line">        rectMap = &#123;&#125;</span><br><span class="line">        <span class="keyword">for</span> (<span class="keyword">let</span> index = <span class="number">0</span>; index &lt; rectList.<span class="property">length</span>; index++) &#123;</span><br><span class="line">            <span class="keyword">let</span> rect = rectList[index];</span><br><span class="line">            rectMap[rect.<span class="title function_">getUid</span>()] = rect;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">let</span> newRects = [];</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">let</span> index = <span class="number">0</span>; index &lt; <span class="variable language_">this</span>.<span class="property">rects</span>.<span class="property">length</span>; index++) &#123;</span><br><span class="line">        <span class="keyword">let</span> usedRect = <span class="variable language_">this</span>.<span class="property">rects</span>[index];</span><br><span class="line">        <span class="keyword">if</span> (!rectMap[usedRect.<span class="title function_">getUid</span>()]) &#123;</span><br><span class="line">            newRects.<span class="title function_">push</span>(usedRect);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">//更新已使用的矩形</span></span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">rects</span> = newRects;</span><br><span class="line">    <span class="comment">//选择不同回收策略</span></span><br><span class="line">    <span class="keyword">if</span> (<span class="variable language_">this</span>.<span class="property">rects</span>.<span class="property">length</span> &gt; <span class="variable language_">this</span>.<span class="property">resetHoldNum</span>) &#123;</span><br><span class="line">        <span class="variable language_">this</span>.<span class="title function_">_batchReleaseByExpand</span>(rectList);</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        <span class="variable language_">this</span>.<span class="title function_">_batchReleaseByReset</span>(rectList);</span><br><span class="line">    &#125;        </span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>空间利用展示</p>
+<img src="/2024/08/08/Label%E5%90%88%E5%9B%BE/%E7%A9%BA%E9%97%B4%E5%88%A9%E7%94%A8%E5%B1%95%E7%A4%BA.png" class="" title="空间利用展示.png">
+<h2 id="用例场景"><a href="#用例场景" class="headerlink" title="用例场景"></a>用例场景</h2><p>和动态合图一样，Label合图不能无脑用。合图的思路是用空间换时间，但是如果渲染的Label不在同一批次，耗时反而会增加，因为每次渲染提交的texture都是大图。<br>需要调整节点结构，使Label能够集中渲染：</p>
+<ol>
+<li>列表结构，使用[[层序渲染]]</li>
+<li>自定义渲染流，使Label最后统一渲染（因为一般情况同界面内的Label都不应该被遮挡）</li>
+</ol>
+
+      
+    </div>
+      
+      <footer>
+        
+        
+        
+  <div class="addthis addthis_toolbox addthis_default_style">
+    
+      <a class="addthis_button_facebook_like" fb:like:layout="button_count"></a>
+    
+    
+      <a class="addthis_button_tweet"></a>
+    
+    
+      <a class="addthis_button_google_plusone" g:plusone:size="medium"></a>
+    
+    
+      <a class="addthis_button_pinterest_pinit" pi:pinit:layout="horizontal"></a>
+    
+    <a class="addthis_counter addthis_pill_style"></a>
+  </div>
+  <script type="text/javascript" src="//s7.addthis.com/js/300/addthis_widget.js"></script>
+
+      
+      <div class="clearfix"></div>
+      </footer>
+  </div>
+</article>
+
+
+<section id="comment">
+  
+</section>
+
+
+</div></div>
+    <aside id="sidebar" class="alignright">
+  <div class="search">
+  <form action="//google.com/search" method="get" accept-charset="utf-8">
+    <input type="search" name="q" results="0" placeholder="搜索">
+    <input type="hidden" name="q" value="site:fr0zen-sh1t.github.io">
+  </form>
+</div>
+
+  
+<div class="widget tag">
+  <h3 class="title">最新文章</h3>
+  <ul class="entry">
+    
+      <li>
+        <a href="/2024/12/15/大型项目预览卡顿解决方案/">大型项目预览卡顿解决方案</a>
+      </li>
+    
+      <li>
+        <a href="/2024/08/08/Label合图/">Label合图</a>
+      </li>
+    
+      <li>
+        <a href="/2024/06/06/自定义渲染流程/">自定义渲染流程</a>
+      </li>
+    
+      <li>
+        <a href="/2024/03/04/psd转预制体/">psd转预制体</a>
+      </li>
+    
+      <li>
+        <a href="/2023/08/25/弹窗管理系统/">弹窗管理系统</a>
+      </li>
+    
+  </ul>
+</div>
+
+
+  
+
+  
+</aside>
+    <div class="clearfix"></div>
+  </div>
+  <footer id="footer" class="inner"><div class="alignleft">
+  
+  &copy; 2025 Fr0zen
+  
+</div>
+<div class="clearfix"></div></footer>
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
+
+
+
+</body>
+</html>
+

@@ -1,0 +1,207 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  <title>大型项目预览卡顿解决方案 › 个人技术博客</title>
+  <meta name="author" content="Fr0zen">
+  
+  <meta name="description" content="大型项目预览卡顿原因在浏览器预览时，调用loadBundle去加载bundle，主要要获得两个文件：config.json和index.js，分别是资源映射和代码。熟悉构建流程的话，会对这两个文件很熟悉，构建后的bundle目录下就包含这两个文件。因此猜想，在预览时请求bundle，引擎会动态构建对">
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+
+  <meta property="og:title" content="大型项目预览卡顿解决方案"/>
+  <meta property="og:site_name" content="个人技术博客"/>
+
+  
+    <meta property="og:image" content=""/>
+  
+
+  <link href="/favicon.png" rel="icon">
+  <link rel="alternate" href="/atom.xml" title="个人技术博客" type="application/atom+xml">
+  <link rel="stylesheet" href="/css/style.css" media="screen" type="text/css">
+  <!--[if lt IE 9]><script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script><![endif]-->
+  
+
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+
+<body>
+  <header id="header"><div class="meta inner">
+  <h1><a href="/">个人技术博客</a></h1>
+  <h2><a href="/">Fr0zen</a></h2>
+  <nav id="main-nav">
+    <ul>
+      
+      <li><a href="/archives">Archives</a></li>
+      
+    </ul>
+    <div class="clearfix"></div>
+  </nav>
+</div>
+<div class="clearfix"></div>
+</header>
+  <div id="content" class="inner">
+    <div id="main-col" class="alignleft"><div id="wrapper"><article class="post">
+  <div class="post-content">
+    <header>
+      
+  
+    <h1 class="title">大型项目预览卡顿解决方案</h1>
+  
+
+      
+        <time datetime="2024-12-14T16:00:00.000Z">2024-12-15</time>
+      
+    </header>
+    <div class="entry">
+      
+        <h1 id="大型项目预览卡顿原因"><a href="#大型项目预览卡顿原因" class="headerlink" title="大型项目预览卡顿原因"></a>大型项目预览卡顿原因</h1><p>在浏览器预览时，调用loadBundle去加载bundle，主要要获得两个文件：config.json和index.js，分别是资源映射和代码。熟悉构建流程的话，会对这两个文件很熟悉，构建后的bundle目录下就包含这两个文件。因此猜想，在预览时请求bundle，引擎会动态构建对应的bundle（由于编辑器不开源，根据实际情况推断，这个构建不是完全构建，可能只是部分构建）。bundle的文件数量越多，动态构建的耗时越长，预览时等待的时间也越长。</p>
+<h1 id="解决方案"><a href="#解决方案" class="headerlink" title="解决方案"></a>解决方案</h1><ol>
+<li>拆分项目为一个主项目和多个子项目，子项目中包含多个bundle。</li>
+<li>构建所有子项目。</li>
+<li>在主项目中启动游戏，加载子项目中的bundle时，修改路径为本地构建好的bundle。</li>
+</ol>
+<h1 id="技术原理"><a href="#技术原理" class="headerlink" title="技术原理"></a>技术原理</h1><h2 id="Asset-Bundle支持跨项目"><a href="#Asset-Bundle支持跨项目" class="headerlink" title="Asset Bundle支持跨项目"></a><strong>Asset Bundle</strong>支持跨项目</h2><p>cocos creator2.4推出了 <a target="_blank" rel="noopener" href="https://docs.cocos.com/creator/2.4/manual/zh/scripting/asset-bundle.html"><strong>Asset Bundle</strong></a> 功能，支持 <strong>代码</strong>、<strong>资源</strong> 和 <strong>场景</strong> 的分包加载。<br>支持加载远程<strong>Asset Bundle</strong>，也支持加载本地<strong>Asset Bundle</strong></p>
+<img src="/2024/12/15/%E5%A4%A7%E5%9E%8B%E9%A1%B9%E7%9B%AE%E9%A2%84%E8%A7%88%E5%8D%A1%E9%A1%BF%E8%A7%A3%E5%86%B3%E6%96%B9%E6%A1%88/%E5%BC%95%E6%93%8E%E5%8A%A0%E8%BD%BDbundle.png" class="" title="引擎加载bundle">
+<p>基于这个特性，我们可以预先构建一些bundle，在预览时直接使用构建好的bundle，这样每次重新预览时就不需要再等引擎动态构建。</p>
+<h2 id="Aswallow插件"><a href="#Aswallow插件" class="headerlink" title="Aswallow插件"></a>Aswallow插件</h2><img src="/2024/12/15/%E5%A4%A7%E5%9E%8B%E9%A1%B9%E7%9B%AE%E9%A2%84%E8%A7%88%E5%8D%A1%E9%A1%BF%E8%A7%A3%E5%86%B3%E6%96%B9%E6%A1%88/%E7%BC%96%E8%BE%91%E5%99%A8%E9%A2%84%E8%A7%88%E6%9C%8D%E5%8A%A1%E5%99%A8.png" class="" title="编辑器预览服务器">
+<p>引擎编辑器内部有个预览服务器，用inspect在控制台打印可以看到，<code>userMiddlewares</code>是个函数数组，通过命名可以看出是个自定义的中间件，实际调试也发现如此。通过在<code>userMiddlewares</code>添加函数，来篡改预览服务器返回资源的逻辑。基于引擎预览服务器的特性，社区大佬开发了<a target="_blank" rel="noopener" href="https://forum.cocos.org/t/topic/115111">Aswallow插件</a>，可以通过配置的方式方便地访问项目外的bundle，特别说明：可以是已构建后的bundle，也可以是本地启动的另一个项目的bundle。</p>
+<h1 id="项目实际案例"><a href="#项目实际案例" class="headerlink" title="项目实际案例"></a>项目实际案例</h1><p>性能分析预览卡顿的最大耗时在动态构建silence_texture上，大概要等1分钟才能构建完成，所以将silence_texture拆分出来。</p>
+<img src="/2024/12/15/%E5%A4%A7%E5%9E%8B%E9%A1%B9%E7%9B%AE%E9%A2%84%E8%A7%88%E5%8D%A1%E9%A1%BF%E8%A7%A3%E5%86%B3%E6%96%B9%E6%A1%88/3x%E5%8A%A0%E8%BD%BDsilence_texture%E5%8D%A1%E9%A1%BF.png" class="" title="3x加载silence_texture卡顿">
+<h2 id="项目拆分目录"><a href="#项目拆分目录" class="headerlink" title="项目拆分目录"></a>项目拆分目录</h2><img src="/2024/12/15/%E5%A4%A7%E5%9E%8B%E9%A1%B9%E7%9B%AE%E9%A2%84%E8%A7%88%E5%8D%A1%E9%A1%BF%E8%A7%A3%E5%86%B3%E6%96%B9%E6%A1%88/3x%E9%A1%B9%E7%9B%AE%E6%8B%86%E5%88%86%E7%9B%AE%E5%BD%95%E7%BB%93%E6%9E%84.png" class="" title="3x项目拆分目录结构">
+<p>将silence_texture文件夹单独提出来拆分成子项目，resources和代码暂时不做拆分，因为prefab直接引用了很多组件，不方便拆分。</p>
+<h2 id="与原项目同步"><a href="#与原项目同步" class="headerlink" title="与原项目同步"></a>与原项目同步</h2><p>一般通过合并的方式同步原项目和拆分后项目。<br>如果原项目和拆分项目完全一致，可以使用svn外链来同步-[[SVN外链-共享仓库目录的方式]]</p>
+<img src="/2024/12/15/%E5%A4%A7%E5%9E%8B%E9%A1%B9%E7%9B%AE%E9%A2%84%E8%A7%88%E5%8D%A1%E9%A1%BF%E8%A7%A3%E5%86%B3%E6%96%B9%E6%A1%88/%E5%A4%96%E9%93%BE%E7%A4%BA%E6%84%8F.png" class="" title="外链示意">
+<h2 id="bundle加载修改"><a href="#bundle加载修改" class="headerlink" title="bundle加载修改"></a>bundle加载修改</h2><p>修改loadBundle，加载silence_texture时使用构建后的路径，加入<strong>PREVIEW_BUNDLE_LOAD_PROTOCOL</strong>前缀，用于在预览服务器中识别。详细实现方案看代码。</p>
+<img src="/2024/12/15/%E5%A4%A7%E5%9E%8B%E9%A1%B9%E7%9B%AE%E9%A2%84%E8%A7%88%E5%8D%A1%E9%A1%BF%E8%A7%A3%E5%86%B3%E6%96%B9%E6%A1%88/bundle%E8%B7%AF%E5%BE%84%E4%BF%AE%E6%94%B9.png" class="" title="bundle路径修改">
+<h2 id="耗时对比"><a href="#耗时对比" class="headerlink" title="耗时对比"></a>耗时对比</h2><p>实际构建silence_texture子项目每次耗时5分钟，而不拆分项目每次预览时动态构建silence_texture耗时1分钟。拆分项目后，最大耗时在加载resources，大概4秒多，总耗时10秒左右。因为在拆分项目后，silence_texture有变化就需要重新构建，把这部分耗时也计算在内，分为四种情况对比耗时。</p>
+<table>
+  <tr>
+    <th style="width: 40%;">预览情况</th>
+    <th style="width: 20%;">原项目</th>
+    <th style="width: 20%;">拆分项目</th>
+  </tr>
+  <tr>
+    <td>silence_texture无变化预览1次</td>
+    <td>1分钟</td>
+    <td>10秒</td>
+  </tr>
+  <tr>
+    <td>silence_texture无变化预览n次</td>
+    <td>1分钟*n</td>
+    <td>10秒*n</td>
+  </tr>
+  <tr>
+    <td>silence_texture变化后预览1次</td>
+    <td>1分钟</td>
+    <td>5分钟+10秒</td>
+  </tr>
+  <tr>
+    <td>silence_texture变化后预览n次</td>
+    <td>1分钟*n</td>
+    <td>5分钟+10秒*n</td>
+  </tr>
+</table>
+容易发现，当silence_texture变化频率不高时，拆分项目是正收益。
+对于**开发**来说，因为silence_texture本来就是动态加载的资源，即使缺少资源在通常情况下并不会卡流程，不会影响当前开发的功能，所以有时候不重新构建也不会有影响，本地silence_texture变化频率相对可以变低。
+对于**测试**来说，可能不一定是正收益。因为测试不会频繁修改代码，刷新预览的次数也不多，反而每次silence_texture有变化都一定要重新构建。如果silence_texture变化频率高，会是负收益。
+
+<p>个人认为，重新预览要等待一分钟十分难以忍受，即使只修改了一行代码，也要等一分钟才能看到效果，<strong>极其影响编码的节奏</strong>。<br>采用拆分项目后，在日常开发流程中，每天开始工作时，基本上只需要构建一次silence_texture，就可以<strong>干掉今天每次预览时需要等待的一分钟</strong>。</p>
+<p>还有一点，主项目相比于原项目少了silence_texture，项目文件少了很多，所以切换回引擎编辑器窗口的卡顿耗时也会降低，这部分耗时不好量化，个人感觉流畅很多。</p>
+<h2 id="构建发布"><a href="#构建发布" class="headerlink" title="构建发布"></a>构建发布</h2><p>Aswallow插件支持处理拆分项目后复杂的构建流程，能将多个子项目整合，构建成同一个项目。</p>
+
+      
+    </div>
+      
+      <footer>
+        
+        
+        
+  <div class="addthis addthis_toolbox addthis_default_style">
+    
+      <a class="addthis_button_facebook_like" fb:like:layout="button_count"></a>
+    
+    
+      <a class="addthis_button_tweet"></a>
+    
+    
+      <a class="addthis_button_google_plusone" g:plusone:size="medium"></a>
+    
+    
+      <a class="addthis_button_pinterest_pinit" pi:pinit:layout="horizontal"></a>
+    
+    <a class="addthis_counter addthis_pill_style"></a>
+  </div>
+  <script type="text/javascript" src="//s7.addthis.com/js/300/addthis_widget.js"></script>
+
+      
+      <div class="clearfix"></div>
+      </footer>
+  </div>
+</article>
+
+
+<section id="comment">
+  
+</section>
+
+
+</div></div>
+    <aside id="sidebar" class="alignright">
+  <div class="search">
+  <form action="//google.com/search" method="get" accept-charset="utf-8">
+    <input type="search" name="q" results="0" placeholder="搜索">
+    <input type="hidden" name="q" value="site:fr0zen-sh1t.github.io">
+  </form>
+</div>
+
+  
+<div class="widget tag">
+  <h3 class="title">最新文章</h3>
+  <ul class="entry">
+    
+      <li>
+        <a href="/2024/12/15/大型项目预览卡顿解决方案/">大型项目预览卡顿解决方案</a>
+      </li>
+    
+      <li>
+        <a href="/2024/08/08/Label合图/">Label合图</a>
+      </li>
+    
+      <li>
+        <a href="/2024/06/06/自定义渲染流程/">自定义渲染流程</a>
+      </li>
+    
+      <li>
+        <a href="/2024/03/04/psd转预制体/">psd转预制体</a>
+      </li>
+    
+      <li>
+        <a href="/2023/08/25/弹窗管理系统/">弹窗管理系统</a>
+      </li>
+    
+  </ul>
+</div>
+
+
+  
+
+  
+</aside>
+    <div class="clearfix"></div>
+  </div>
+  <footer id="footer" class="inner"><div class="alignleft">
+  
+  &copy; 2025 Fr0zen
+  
+</div>
+<div class="clearfix"></div></footer>
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
+
+
+
+</body>
+</html>
+

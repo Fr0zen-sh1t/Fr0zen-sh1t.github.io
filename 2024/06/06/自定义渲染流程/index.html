@@ -1,0 +1,181 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  <title>自定义渲染流程 › 个人技术博客</title>
+  <meta name="author" content="Fr0zen">
+  
+  <meta name="description" content="cocos 渲染流程渲染流 RenderFlow2.x 中 cocos 引擎的渲染流程是通过渲染流（RenderFlow）实现的。
+
+但是渲染流不支持拓展和修改，除非自己修改引擎代码。
+渲染组件 RenderComponent每帧执行一次渲染流，其中每个RenderComponent的具体要渲染什么">
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+
+  <meta property="og:title" content="自定义渲染流程"/>
+  <meta property="og:site_name" content="个人技术博客"/>
+
+  
+    <meta property="og:image" content=""/>
+  
+
+  <link href="/favicon.png" rel="icon">
+  <link rel="alternate" href="/atom.xml" title="个人技术博客" type="application/atom+xml">
+  <link rel="stylesheet" href="/css/style.css" media="screen" type="text/css">
+  <!--[if lt IE 9]><script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script><![endif]-->
+  
+
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+
+<body>
+  <header id="header"><div class="meta inner">
+  <h1><a href="/">个人技术博客</a></h1>
+  <h2><a href="/">Fr0zen</a></h2>
+  <nav id="main-nav">
+    <ul>
+      
+      <li><a href="/archives">Archives</a></li>
+      
+    </ul>
+    <div class="clearfix"></div>
+  </nav>
+</div>
+<div class="clearfix"></div>
+</header>
+  <div id="content" class="inner">
+    <div id="main-col" class="alignleft"><div id="wrapper"><article class="post">
+  <div class="post-content">
+    <header>
+      
+  
+    <h1 class="title">自定义渲染流程</h1>
+  
+
+      
+        <time datetime="2024-06-05T16:00:00.000Z">2024-06-06</time>
+      
+    </header>
+    <div class="entry">
+      
+        <h1 id="cocos-渲染流程"><a href="#cocos-渲染流程" class="headerlink" title="cocos 渲染流程"></a>cocos 渲染流程</h1><h2 id="渲染流-RenderFlow"><a href="#渲染流-RenderFlow" class="headerlink" title="渲染流 RenderFlow"></a>渲染流 RenderFlow</h2><p>2.x 中 cocos 引擎的渲染流程是通过渲染流（RenderFlow）实现的。</p>
+<img src="/2024/06/06/%E8%87%AA%E5%AE%9A%E4%B9%89%E6%B8%B2%E6%9F%93%E6%B5%81%E7%A8%8B/render-flow.png" class="" title="render-flow">
+<p>但是渲染流不支持拓展和修改，除非自己修改引擎代码。</p>
+<h2 id="渲染组件-RenderComponent"><a href="#渲染组件-RenderComponent" class="headerlink" title="渲染组件 RenderComponent"></a>渲染组件 RenderComponent</h2><p>每帧执行一次渲染流，其中每个<code>RenderComponent</code>的具体要渲染什么，需要在<strong>渲染执行前</strong>确定下来。具体由各个<code>Assembler</code>处理，生成<code>RenderData</code>，如下图：</p>
+<img src="/2024/06/06/%E8%87%AA%E5%AE%9A%E4%B9%89%E6%B8%B2%E6%9F%93%E6%B5%81%E7%A8%8B/render-component.png" class="" title="render-component">
+
+<h2 id="合批"><a href="#合批" class="headerlink" title="合批"></a>合批</h2><p>引擎为了优化渲染效率，在实际渲染前加入了合批判断，以减少渲染次数。<br>合批的判断发生在渲染流的<code>render</code>步骤，可以简单理解为：如果为上次渲染组件的材质或分组和下次渲染的材质或分组不同，就会打断合批。</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/*** render-flow.js ***/</span></span><br><span class="line">_proto.<span class="property">_render</span> = <span class="keyword">function</span> (<span class="params">node</span>) &#123;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">let</span> comp = node.<span class="property">_renderComponent</span>;</span><br><span class="line"></span><br><span class="line">    comp.<span class="title function_">_checkBacth</span>(_batcher, node.<span class="property">_cullingMask</span>);</span><br><span class="line"></span><br><span class="line">    comp.<span class="property">_assembler</span>.<span class="title function_">fillBuffers</span>(comp, _batcher);</span><br><span class="line"></span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">_next</span>.<span class="title function_">_func</span>(node);</span><br><span class="line"></span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">/*** render-flow.js ***/</span></span><br><span class="line"></span><br><span class="line"><span class="comment">/*** CCRenderComponent.js ***/</span></span><br><span class="line"><span class="title function_">_checkBacth</span> (renderer, cullingMask) &#123;</span><br><span class="line">    <span class="keyword">let</span> material = <span class="variable language_">this</span>.<span class="property">_materials</span>[<span class="number">0</span>];</span><br><span class="line">    <span class="comment">// 材质的哈希值不同，或者裁剪位码不同，打断合批</span></span><br><span class="line">    <span class="keyword">if</span> ((material &amp;&amp; material.<span class="title function_">getHash</span>() !== renderer.<span class="property">material</span>.<span class="title function_">getHash</span>()) ||</span><br><span class="line">        renderer.<span class="property">cullingMask</span> !== cullingMask) &#123;</span><br><span class="line">        renderer.<span class="title function_">_flush</span>();</span><br><span class="line"></span><br><span class="line">        renderer.<span class="property">node</span> = material.<span class="title function_">getDefine</span>(<span class="string">&#x27;CC_USE_MODEL&#x27;</span>) ? <span class="variable language_">this</span>.<span class="property">node</span> : renderer.<span class="property">_dummyNode</span>;</span><br><span class="line">        renderer.<span class="property">material</span> = material;</span><br><span class="line">        renderer.<span class="property">cullingMask</span> = cullingMask;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">/*** CCRenderComponent.js ***/</span></span><br></pre></td></tr></table></figure>
+
+<p>而渲染遍历节点的顺序是深度优先，最常见的情况是渲染节点的纹理不同，导致合批被打断。<br>根据引擎合批的特点，尽量减少合批被打断的次数，有如下思路：</p>
+<ol>
+<li>保持材质<code>Material</code>不变，将需要渲染的图片合并到一张纹理<code>texture</code>上：动态合图、静态图集</li>
+<li>修改材质<code>Material</code>，接收并处理多个纹理<code>texture</code>：多纹理材质</li>
+<li>自定义渲染流程，默认遍历节点的方式是深度优先，某些情况下修改遍历方式，可以大幅减少合批被打断的次数，例如：用层序遍历的方式渲染列表。</li>
+</ol>
+<h1 id="修改渲染流"><a href="#修改渲染流" class="headerlink" title="修改渲染流"></a>修改渲染流</h1><p>修改渲染流，主要是为了解决引擎渲染流的两种缺陷：</p>
+<ol>
+<li>渲染流不支持拓展，无法实现特殊渲染需求，例如：共享节点渲染。</li>
+<li>渲染的遍历方式不支持修改，只能使用深度优先，在遇到特殊渲染需求时，合批容易被打断导致 DrawCall 增加，例如：列表渲染。</li>
+</ol>
+<h2 id="修改渲染遍历顺序"><a href="#修改渲染遍历顺序" class="headerlink" title="修改渲染遍历顺序"></a>修改渲染遍历顺序</h2><p>这里提供一种不用修改引擎实现修改渲染的遍历顺序的方案。<br>修改节点的<code>renderFlag</code>，跳过遍历子节点的<code>children</code>阶段，放到自定义<code>Assembler</code>中的渲染流后渲染<code>postRender</code>阶段时再自己实现自定义的遍历顺序，这样做的好处是可以不用修改引擎。</p>
+<figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Assembler核心处理代码</span></span><br><span class="line"><span class="title function_">fillBuffers</span>(<span class="params">comp, renderer</span>)&#123;</span><br><span class="line">    ...</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">let</span> c <span class="keyword">of</span> node.<span class="property">children</span>) &#123;</span><br><span class="line">        <span class="keyword">if</span> (needOrder) &#123;</span><br><span class="line">            <span class="keyword">if</span> (!nodeOrderRecord[c.<span class="property">name</span>]) &#123;</span><br><span class="line">                nodeOrderRecord[c.<span class="property">name</span>] = nodeOrder++;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">if</span> (!c.<span class="property">_activeInHierarchy</span> || c.<span class="property">_opacity</span> === <span class="number">0</span>) <span class="keyword">continue</span>;</span><br><span class="line">        gtRenderFlag = c.<span class="property">_renderFlag</span> &amp; <span class="variable constant_">RENDER_MASK</span>;</span><br><span class="line">        <span class="keyword">if</span> (gtRenderFlag &gt; <span class="number">0</span>) &#123;</span><br><span class="line">            <span class="comment">// 移除子节点的renderFlag，使renderFlow不执行它的RENDER函数</span></span><br><span class="line">            c[<span class="string">&quot;__gtRenderFlag&quot;</span>] = gtRenderFlag;</span><br><span class="line">            c.<span class="property">_renderFlag</span> &amp;= ~gtRenderFlag;</span><br><span class="line">            <span class="keyword">let</span> <span class="attr">key</span>: <span class="built_in">string</span>;</span><br><span class="line">            <span class="comment">// 内部策略策略</span></span><br><span class="line">            <span class="keyword">for</span> (<span class="keyword">let</span> strategy <span class="keyword">of</span> <span class="variable language_">this</span>.<span class="property">_innerStrategies</span>) &#123;</span><br><span class="line">                key = <span class="title function_">strategy</span>(c);</span><br><span class="line">                <span class="keyword">if</span> (key) <span class="keyword">break</span>;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="comment">// 外部策略策略</span></span><br><span class="line">            <span class="keyword">if</span> (!key) &#123;</span><br><span class="line">                <span class="keyword">for</span> (<span class="keyword">let</span> strategy <span class="keyword">of</span> <span class="variable language_">this</span>.<span class="property">_renderComp</span>.<span class="property">strategies</span>) &#123;</span><br><span class="line">                    key = <span class="title function_">strategy</span>(c);</span><br><span class="line">                    <span class="keyword">if</span> (key) <span class="keyword">break</span>;</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">if</span> (!key) key = <span class="title class_">LayerKey</span>.<span class="property">None</span>;</span><br><span class="line">            <span class="comment">// 根据策略给节点分层，后渲染时按分层渲染</span></span><br><span class="line">            <span class="keyword">if</span> (key.<span class="title function_">includes</span>(<span class="string">&quot;Top&quot;</span>)) &#123;</span><br><span class="line">                <span class="keyword">if</span> (!<span class="variable language_">this</span>.<span class="property">_topLayerMap</span>[key]) &#123;</span><br><span class="line">                    <span class="variable language_">this</span>.<span class="property">_topLayerMap</span>[key] = [];</span><br><span class="line">                &#125;</span><br><span class="line">                <span class="variable language_">this</span>.<span class="property">_topLayerMap</span>[key].<span class="title function_">push</span>(c);</span><br><span class="line">            &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">                <span class="keyword">if</span> (!layerMap[key]) &#123;</span><br><span class="line">                    layerMap[key] = [];</span><br><span class="line">                &#125;</span><br><span class="line">                layerMap[key].<span class="title function_">push</span>(c);</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="comment">// 逐层传递父节点的dirtyFlag</span></span><br><span class="line">        c[<span class="string">&quot;__gtDirtyFlag&quot;</span>] = dirtyFlag | (c.<span class="property">_renderFlag</span> &amp; <span class="variable constant_">PROP_DIRTY_MASK</span>);</span><br><span class="line">        queue.<span class="title function_">push</span>(c);</span><br><span class="line">    &#125;</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="title function_">postFillBuffers</span>(<span class="params">comp, renderer</span>) &#123;</span><br><span class="line">    ...</span><br><span class="line">    <span class="comment">// 按层级遍历所有子节点</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">let</span> layer <span class="keyword">of</span> <span class="variable language_">this</span>.<span class="property">_layers</span>) &#123;</span><br><span class="line">        <span class="keyword">if</span> (layer.<span class="property">length</span> == <span class="number">0</span>)</span><br><span class="line">            <span class="keyword">continue</span>;</span><br><span class="line">        <span class="keyword">for</span> (<span class="keyword">let</span> c <span class="keyword">of</span> layer) &#123;</span><br><span class="line">            gtRenderFlag = c[<span class="string">&quot;__gtRenderFlag&quot;</span>];</span><br><span class="line">            gtDirtyFlag = c[<span class="string">&quot;__gtDirtyFlag&quot;</span>];</span><br><span class="line">            <span class="comment">// 设置worldMatDirty，在引擎默认fillBuffers()中该变量用于判断是否更新世界坐标</span></span><br><span class="line">            renderer.<span class="property">worldMatDirty</span> = gtDirtyFlag &gt; <span class="number">0</span> ? <span class="number">1</span> : <span class="number">0</span>;</span><br><span class="line">            c.<span class="property">_renderFlag</span> |= gtRenderFlag;</span><br><span class="line">            <span class="comment">// 调用子节点RenderFlow的剩余部分</span></span><br><span class="line">            cc.<span class="property">RenderFlow</span>.<span class="property">flows</span>[gtRenderFlag].<span class="title function_">_func</span>(c);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>基于论坛大佬的<a target="_blank" rel="noopener" href="https://forum.cocos.org/t/postrender-demo/95201">层序渲染</a>思路改进而实现。</p>
+<h2 id="修改-拓展渲染流"><a href="#修改-拓展渲染流" class="headerlink" title="修改&#x2F;拓展渲染流"></a>修改&#x2F;拓展渲染流</h2><p>修改<code>render-flow.js</code>下的代码，拓展渲染流，例如：在渲染完节点后加入自定义逻辑。</p>
+
+      
+    </div>
+      
+      <footer>
+        
+        
+        
+  <div class="addthis addthis_toolbox addthis_default_style">
+    
+      <a class="addthis_button_facebook_like" fb:like:layout="button_count"></a>
+    
+    
+      <a class="addthis_button_tweet"></a>
+    
+    
+      <a class="addthis_button_google_plusone" g:plusone:size="medium"></a>
+    
+    
+      <a class="addthis_button_pinterest_pinit" pi:pinit:layout="horizontal"></a>
+    
+    <a class="addthis_counter addthis_pill_style"></a>
+  </div>
+  <script type="text/javascript" src="//s7.addthis.com/js/300/addthis_widget.js"></script>
+
+      
+      <div class="clearfix"></div>
+      </footer>
+  </div>
+</article>
+
+
+<section id="comment">
+  
+</section>
+
+
+</div></div>
+    <aside id="sidebar" class="alignright">
+  <div class="search">
+  <form action="//google.com/search" method="get" accept-charset="utf-8">
+    <input type="search" name="q" results="0" placeholder="搜索">
+    <input type="hidden" name="q" value="site:fr0zen-sh1t.github.io">
+  </form>
+</div>
+
+  
+<div class="widget tag">
+  <h3 class="title">最新文章</h3>
+  <ul class="entry">
+    
+      <li>
+        <a href="/2024/12/15/大型项目预览卡顿解决方案/">大型项目预览卡顿解决方案</a>
+      </li>
+    
+      <li>
+        <a href="/2024/08/08/Label合图/">Label合图</a>
+      </li>
+    
+      <li>
+        <a href="/2024/06/06/自定义渲染流程/">自定义渲染流程</a>
+      </li>
+    
+      <li>
+        <a href="/2024/03/04/psd转预制体/">psd转预制体</a>
+      </li>
+    
+      <li>
+        <a href="/2023/08/25/弹窗管理系统/">弹窗管理系统</a>
+      </li>
+    
+  </ul>
+</div>
+
+
+  
+
+  
+</aside>
+    <div class="clearfix"></div>
+  </div>
+  <footer id="footer" class="inner"><div class="alignleft">
+  
+  &copy; 2025 Fr0zen
+  
+</div>
+<div class="clearfix"></div></footer>
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
+
+
+
+</body>
+</html>
+
